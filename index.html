@@ -147,5 +147,357 @@
           const r=new FileReader(); r.onload=(ev)=>{try{
             const data=JSON.parse(ev.target.result);
             if(data.exercises) setExercises(data.exercises);
-            if(data.workouts) setWorkouts(data.workouts)
+            if(data.workouts) setWorkouts(data.workouts);
+            if(data.foods) setFoods(data.foods);
+            if(data.foodLogs) setFoodLogs(data.foodLogs);
+            if(data.energyLogs) setEnergyLogs(data.energyLogs);
+            if(data.measurements) setMeasurements(data.measurements);
+            if(data.settings) setSettings(data.settings);
+          }catch{alert("Invalid JSON")}};
+          r.readAsText(f);
+        };
+        exportBtn?.addEventListener("click", onExport);
+        importBtn?.addEventListener("click", onImportClick);
+        importFile?.addEventListener("change", onImport);
+        return ()=>{
+          exportBtn?.removeEventListener("click", onExport);
+          importBtn?.removeEventListener("click", onImportClick);
+          importFile?.removeEventListener("change", onImport);
+        };
+      },[exercises,workouts,foods,foodLogs,energyLogs,measurements,settings]);
 
+      // Tab buttons
+      useEffect(()=>{
+        const handler=(btn)=>{
+          document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+          btn.classList.add("active");
+          setTab(btn.dataset.tab);
+        };
+        document.querySelectorAll(".tab").forEach(btn=>{
+          const onClick=()=>handler(btn);
+          btn.addEventListener("click", onClick);
+          btn._cleanup = onClick;
+        });
+        return ()=>{
+          document.querySelectorAll(".tab").forEach(btn=>{
+            if(btn._cleanup) btn.removeEventListener("click", btn._cleanup);
+          });
+        };
+      },[]);
+
+      const workoutForDate = useMemo(()=> workouts.find(w=>w.date===date) || {date,entries:[]}, [workouts,date]);
+      const upsertWorkout = (next)=> setWorkouts(prev=>{ const i=prev.findIndex(w=>w.date===next.date); const n=[...prev]; if(i===-1) n.push(next); else n[i]=next; return n; });
+      const lastSetsForExercise = (exerciseId)=>{ const hist=[...workouts].filter(w=>w.date!==date).sort((a,b)=>b.date.localeCompare(a.date)); for(const w of hist){ const rec=w.entries.find(e=>e.exerciseId===exerciseId); if(rec) return {date:w.date,sets:rec.sets}; } return null; };
+
+      return (
+        <div className="grid" style={{gap:12}}>
+          {tab==="workout" && <Workout
+            date={date} exercises={exercises} setExercises={setExercises}
+            workout={workoutForDate} upsertWorkout={upsertWorkout}
+            lastSetsForExercise={lastSetsForExercise}
+            activeExerciseId={activeExerciseId} setActiveExerciseId={setActiveExerciseId}
+            settings={settings}
+          />}
+          {tab==="food" && <Food
+            date={date} foods={foods} setFoods={setFoods}
+            foodLogs={foodLogs} setFoodLogs={setFoodLogs}
+            settings={settings} setSettings={setSettings}
+          />}
+          {tab==="energy" && <Energy date={date} energyLogs={energyLogs} setEnergyLogs={setEnergyLogs} />}
+          {tab==="measure" && <Measure date={date} measurements={measurements} setMeasurements={setMeasurements} />}
+          {tab==="insights" && <Insights workouts={workouts} exercises={exercises} foodLogs={foodLogs} settings={settings} />}
+        </div>
+      );
+    }
+
+    function Workout({date,exercises,setExercises,workout,upsertWorkout,lastSetsForExercise,activeExerciseId,setActiveExerciseId,settings}){
+      const [newName,setNewName]=useState("");
+      const [newCat,setNewCat]=useState("Other");
+
+      const addExerciseToDay = (exerciseId)=>{
+        const next={...workout}; if(!next.entries) next.entries=[];
+        if(!next.entries.find(e=>e.exerciseId===exerciseId)){ next.entries.push({exerciseId,sets:[]}); upsertWorkout(next); }
+      };
+      const addSet = (exerciseId,set)=>{ const next={...workout}; const entry=next.entries.find(e=>e.exerciseId===exerciseId); entry.sets.push(set); upsertWorkout(next); };
+      const removeSet = (exerciseId,idx)=>{ const next={...workout}; const entry=next.entries.find(e=>e.exerciseId===exerciseId); entry.sets.splice(idx,1); upsertWorkout(next); };
+
+      const grouped = useMemo(()=>{ const g={}; exercises.forEach(e=>{(g[e.category]??=[]).push(e)}); return Object.entries(g).sort((a,b)=>a[0].localeCompare(b[0])); },[exercises]);
+      useEffect(()=>{ if(!activeExerciseId && exercises[0]) setActiveExerciseId(exercises[0].id); },[exercises]);
+
+      const activeEntry = workout.entries.find(e=>e.exerciseId===activeExerciseId);
+      const last = lastSetsForExercise(activeExerciseId);
+      const activeExercise = exercises.find(e=>e.id===activeExerciseId);
+
+      return (
+        <div className="grid" style={{gridTemplateColumns:"1fr 2fr",gap:12}}>
+          <div className="card">
+            <div className="row" style={{alignItems:"end",marginBottom:8}}>
+              <input placeholder="New exercise name" value={newName} onChange={e=>setNewName(e.target.value)} style={{flex:1}}/>
+              <select value={newCat} onChange={e=>setNewCat(e.target.value)}>
+                {["Chest","Back","Legs","Shoulders","Arms","Core","Other"].map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
+              <button onClick={()=>{ if(!newName.trim()) return; setExercises(p=>[...p,{id:uid(),name:newName.trim(),category:newCat}]); setNewName("")}}>Add</button>
+            </div>
+            {grouped.map(([cat,items])=>(
+              <div key={cat} className="card">
+                <div style={{fontWeight:600,marginBottom:6}}>{cat}</div>
+                <div className="grid" style={{gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  {items.map(it=>(
+                    <button key={it.id} className={"pill"} style={activeExerciseId===it.id?{background:"#111",color:"#fff"}:{}}
+                      onClick={()=>{ setActiveExerciseId(it.id); addExerciseToDay(it.id); }}>
+                      {it.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="card">
+            <div className="row" style={{justifyContent:"space-between"}}>
+              <div style={{fontWeight:700}}>{activeExercise?.name || "Select an exercise"}</div>
+              <div className="muted">Units: {settings.units.weight}</div>
+            </div>
+
+            {last ? (
+              <div className="card">
+                <div style={{fontWeight:600}}>Last session {last.date}:</div>
+                <div className="row" style={{flexWrap:"wrap",marginTop:6}}>
+                  {last.sets.map((s,i)=><span key={i} className="pill">{s.weight}{settings.units.weight} × {s.reps}</span>)}
+                </div>
+              </div>
+            ) : <div className="muted" style={{margin:"8px 0"}}>No previous sets.</div>}
+
+            {activeEntry && (
+              <div className="grid">
+                <AddSet onAdd={set=>addSet(activeEntry.exerciseId,set)} units={settings.units.weight}/>
+                <div className="card">
+                  <div style={{fontWeight:600,marginBottom:6}}>Today’s sets</div>
+                  {activeEntry.sets.length===0 && <div className="muted">No sets yet.</div>}
+                  <div className="row" style={{flexWrap:"wrap"}}>
+                    {activeEntry.sets.map((s,i)=>(
+                      <span key={i} className="pill" style={{display:"inline-flex",alignItems:"center",gap:6}}>
+                        {s.weight}{settings.units.weight} × {s.reps}
+                        <button style={{border:"none",background:"transparent",fontWeight:700}} onClick={()=>removeSet(activeEntry.exerciseId,i)}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <ExerciseInsights exercise={activeExercise} currentSets={activeEntry.sets}/>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function AddSet({onAdd,units}){
+      const [w,setW]=useState(""), [r,setR]=useState("");
+      return (
+        <div className="row" style={{alignItems:"end"}}>
+          <div>
+            <div className="muted" style={{fontSize:12}}>Weight ({units})</div>
+            <input inputMode="decimal" placeholder="e.g. 32.5" value={w} onChange={e=>setW(e.target.value)}/>
+          </div>
+          <div>
+            <div className="muted" style={{fontSize:12}}>Reps</div>
+            <input inputMode="numeric" placeholder="e.g. 10" value={r} onChange={e=>setR(e.target.value)}/>
+          </div>
+          <button onClick={()=>{ const ww=parseFloat(w); const rr=parseInt(r); if(!isFinite(ww)||!isFinite(rr)||rr<=0)return; onAdd({weight:ww,reps:rr}); setW(""); setR(""); }}>Add set</button>
+        </div>
+      );
+    }
+
+    function Food({date,foods,setFoods,foodLogs,setFoodLogs,settings,setSettings}){
+      const [search,setSearch]=useState(""), [portion,setPortion]=useState(""), [foodId,setFoodId]=useState(foods[0]?.id||"");
+      useEffect(()=>{ if(!foodId && foods[0]) setFoodId(foods[0].id); },[foods]);
+
+      const day = foodLogs.find(f=>f.date===date) || {date,items:[]};
+      const filtered = foods.filter(f=>f.name.toLowerCase().includes(search.toLowerCase()));
+      const totals = day.items.reduce((a,x)=>({kcal:a.kcal+x.kcal,protein:a.protein+x.protein,carbs:a.carbs+x.carbs,fat:a.fat+x.fat}),{kcal:0,protein:0,carbs:0,fat:0});
+
+      const add = ()=>{
+        const f = foods.find(x=>x.id===foodId); const qty=parseFloat(portion);
+        if(!f || !isFinite(qty) || qty<=0) return;
+        const factor = qty / f.per;
+        const entry = { id:uid(), name:f.name, qty, unit:f.unit,
+          kcal:+(f.kcal*factor).toFixed(0), protein:+(f.protein*factor).toFixed(1), carbs:+(f.carbs*factor).toFixed(1), fat:+(f.fat*factor).toFixed(1) };
+        setFoodLogs(prev=>{ const i=prev.findIndex(l=>l.date===date); const n=[...prev]; if(i===-1) n.push({date,items:[entry]}); else n[i]={...n[i],items:[...n[i].items,entry]}; return n; });
+        setPortion("");
+      };
+
+      return (
+        <div className="grid" style={{gridTemplateColumns:"2fr 1fr",gap:12}}>
+          <div className="card">
+            <div className="grid" style={{gridTemplateColumns:"2fr 1fr 1fr",gap:8}}>
+              <div className="row">
+                <input placeholder="Search foods…" value={search} onChange={e=>setSearch(e.target.value)} style={{flex:1}}/>
+                <select value={foodId} onChange={e=>setFoodId(e.target.value)} style={{minWidth:220}}>
+                  {filtered.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+              </div>
+              <div className="row">
+                <div style={{flex:1}}>
+                  <div className="muted" style={{fontSize:12}}>Portion (in {(foods.find(x=>x.id===foodId)?.unit || "g")})</div>
+                  <input inputMode="decimal" placeholder="e.g. 200" value={portion} onChange={e=>setPortion(e.target.value)} style={{width:"100%"}}/>
+                </div>
+                <button onClick={add}>Add</button>
+              </div>
+            </div>
+
+            <div className="card">
+              {day.items.length===0 && <div className="muted">No items yet.</div>}
+              {day.items.map(it=>(
+                <div key={it.id} className="row" style={{justifyContent:"space-between"}}>
+                  <div>
+                    <div style={{fontWeight:600}}>{it.name}</div>
+                    <div className="muted">{it.qty}{it.unit}</div>
+                  </div>
+                  <div className="row">
+                    <span className="pill">kcal: {it.kcal}</span>
+                    <span className="pill">P: {it.protein}</span>
+                    <span className="pill">C: {it.carbs}</span>
+                    <span className="pill">F: {it.fat}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:6}}>Today’s macros</div>
+            <MacroRow name="Calories" value={totals.kcal} target={settings.macroTargets.kcal} unit="kcal"/>
+            <MacroRow name="Protein" value={totals.protein} target={settings.macroTargets.protein} unit="g"/>
+            <MacroRow name="Carbs" value={totals.carbs} target={settings.macroTargets.carbs} unit="g"/>
+            <MacroRow name="Fat" value={totals.fat} target={settings.macroTargets.fat} unit="g"/>
+          </div>
+        </div>
+      );
+    }
+
+    function MacroRow({name,value,target,unit}){
+      const pct=Math.min(100,Math.round((value/Math.max(1,target))*100));
+      return (
+        <div style={{marginBottom:8}}>
+          <div className="row" style={{justifyContent:"space-between"}}><span>{name}</span><span>{value} / {target} {unit}</span></div>
+          <div className="bar"><div className="fill" style={{width:pct+"%"}}></div></div>
+        </div>
+      );
+    }
+
+    function Energy({date,energyLogs,setEnergyLogs}){
+      const [activity,setActivity]=useState(""), [cal,setCal]=useState("");
+      const day = energyLogs.find(e=>e.date===date) || {date,items:[]};
+      const add=()=>{ const kc=parseInt(cal); if(!activity||!isFinite(kc)||kc<=0)return;
+        const entry={id:uid(),activity,kcal:kc};
+        setEnergyLogs(prev=>{const i=prev.findIndex(d=>d.date===date); const n=[...prev]; if(i===-1) n.push({date,items:[entry]}); else n[i]={...n[i],items:[...n[i].items,entry]}; return n;});
+        setActivity(""); setCal("");
+      };
+      const total = day.items.reduce((a,b)=>a+b.kcal,0);
+      return (
+        <div className="grid grid-2">
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:6}}>Energy expenditure — {date}</div>
+            <div className="row" style={{marginBottom:8}}>
+              <input placeholder="Activity (e.g., Football)" value={activity} onChange={e=>setActivity(e.target.value)}/>
+              <input placeholder="kcal" inputMode="numeric" value={cal} onChange={e=>setCal(e.target.value)}/>
+              <button onClick={add}>Add</button>
+            </div>
+            <div className="card" style={{margin:0}}>
+              {day.items.length===0 && <div className="muted">No entries yet.</div>}
+              {day.items.map(it=>(<div key={it.id} className="row" style={{justifyContent:"space-between"}}><span>{it.activity}</span><span>{it.kcal} kcal</span></div>))}
+              <div className="row" style={{justifyContent:"space-between",marginTop:8,paddingTop:8,borderTop:"1px solid #eee"}}><span style={{fontWeight:600}}>Total</span><span>{total} kcal</span></div>
+            </div>
+          </div>
+          <div className="card">
+            <div style={{fontWeight:600}}>Balance snapshot</div>
+            <div className="muted">Compare with Food tab calories.</div>
+          </div>
+        </div>
+      );
+    }
+
+    function Measure({date,measurements,setMeasurements}){
+      const latest=[...measurements].sort((a,b)=>b.date.localeCompare(a.date))[0];
+      const [d,setD]=useState(latest||{date,weight:"",chest:"",waist:"",hips:"",bicepL:"",bicepR:"",thighL:"",thighR:""});
+      useEffect(()=>{setD(v=>({...v,date}))},[date]);
+      const save=()=>{ const clean={...d,weight:n(d.weight),chest:n(d.chest),waist:n(d.waist),hips:n(d.hips),bicepL:n(d.bicepL),bicepR:n(d.bicepR),thighL:n(d.thighL),thighR:n(d.thighR)};
+        setMeasurements(prev=>{const i=prev.findIndex(x=>x.date===clean.date); const n=[...prev]; if(i===-1) n.push(clean); else n[i]=clean; return n;});
+      };
+      const hist=[...measurements].sort((a,b)=>a.date.localeCompare(b.date));
+      return (
+        <div className="grid grid-2">
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:6}}>Body measurements — {date}</div>
+            {[
+              ["Body weight (kg)","weight"],["Chest (cm)","chest"],["Waist (cm)","waist"],["Hips (cm)","hips"],
+              ["Bicep L (cm)","bicepL"],["Bicep R (cm)","bicepR"],["Thigh L (cm)","thighL"],["Thigh R (cm)","thighR"]
+            ].map(([label,key])=>(
+              <label key={key} className="row" style={{justifyContent:"space-between"}}>
+                <span className="muted" style={{width:160}}>{label}</span>
+                <input inputMode="decimal" value={String(d[key]||"")} onChange={e=>setD(prev=>({...prev,[key]:e.target.value}))}/>
+              </label>
+            ))}
+            <button onClick={save} style="margin-top:8px">Save measurements</button>
+          </div>
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:6}}>Weight history</div>
+            <div style={{maxHeight:260,overflow:"auto"}}>
+              {hist.length===0 ? <div className="muted">No entries yet.</div> : hist.map((h,i)=>(<div key={i} className="row" style={{justifyContent:"space-between"}}><span>{h.date}</span><span>{h.weight}</span></div>))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function Insights({workouts,exercises,foodLogs,settings}){
+      const vols=useMemo(()=>{const x={};workouts.forEach(w=>w.entries?.forEach(e=>{const name=exercises.find(i=>i.id===e.exerciseId)?.name||"Unknown";const v=e.sets.reduce((a,s)=>a+s.weight*s.reps,0);(x[name]??=[]).push({date:w.date,volume:Math.round(v)});}));return x;},[workouts,exercises]);
+      const macros=useMemo(()=>foodLogs.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(d=>({date:d.date,kcal:sum(d.items,"kcal"),P:sum(d.items,"protein"),C:sum(d.items,"carbs"),F:sum(d.items,"fat")})),[foodLogs]);
+      const first=Object.keys(vols)[0];
+      return (
+        <div className="grid grid-2">
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:6}}>Training volume — {first||"No data yet"}</div>
+            <div className="mono" style={{maxHeight:260,overflow:"auto"}}>
+              {first ? vols[first].sort((a,b)=>a.date.localeCompare(b.date)).map((d,i)=>(<div key={i} className="row" style={{justifyContent:"space-between"}}><span>{d.date}</span><span>{d.volume}</span></div>))
+               : <div className="muted">Log some workouts to see trends.</div>}
+            </div>
+          </div>
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:6}}>Daily macros</div>
+            <div className="mono" style={{maxHeight:260,overflow:"auto"}}>
+              {macros.length===0 ? <div className="muted">No food logs yet.</div>
+               : macros.map((d,i)=>(<div key={i} className="row" style={{justifyContent:"space-between"}}><span>{d.date}</span><span>{d.kcal} kcal (P{d.P} C{d.C} F{d.F})</span></div>))}
+            </div>
+            <div className="muted" style={{fontSize:12,marginTop:6}}>Target calories: {settings.macroTargets.kcal} kcal.</div>
+          </div>
+        </div>
+      );
+    }
+
+    function ExerciseInsights({exercise,currentSets}){
+      const est=(w,r)=>w*(1+r/30);
+      const all=[]; try{const ws=JSON.parse(localStorage.getItem("fit.workouts")||"[]"); ws.forEach(w=>w.entries?.forEach(e=>{if(e.exerciseId===exercise?.id) e.sets.forEach(s=>all.push({date:w.date,...s}));}));}catch{}
+      currentSets?.forEach(s=>all.push({date:todayISO(),...s}));
+      const best=all.reduce((a,s)=>{const e=est(s.weight,s.reps);return e>a.est?{...s,est:e}:a;},{est:0});
+      const vol=currentSets?.reduce((a,s)=>a+s.weight*s.reps,0)||0;
+      return (
+        <div className="card">
+          <div style={{fontWeight:600,marginBottom:6}}>Exercise insights</div>
+          <div className="row" style={{flexWrap:"wrap"}}>
+            <span className="pill">Today volume: {Math.round(vol)}</span>
+            <span className="pill">Best est. 1RM: {best.est?Math.round(best.est):"–"}</span>
+            {best.est ? <span className="pill">Best set: {best.weight}×{best.reps}</span> : null}
+          </div>
+        </div>
+      );
+    }
+
+    function n(v){const x=parseFloat(v);return isFinite(x)?x:0;}
+    function sum(arr,key){return arr.reduce((a,b)=>a+(b[key]||0),0);}
+
+    const root = ReactDOM.createRoot(document.getElementById("app"));
+    root.render(<App/>);
+  </script>
+</body>
+</html>
