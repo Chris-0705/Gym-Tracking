@@ -1,6 +1,153 @@
-<!doctype html>
-<meta charset="utf-8">
-<title>Gym Tracking — Test</title>
-<style>body{font:16px/1.4 system-ui;margin:0;padding:40px;background:#111;color:#fff}</style>
-<h1>✅ It works!</h1>
-<p>If you can see this, GitHub Pages is serving your site correctly.</p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gym Tracker</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f4f4f4; }
+  header { background: #222; color: #fff; padding: 10px; text-align: center; }
+  nav { display: flex; justify-content: center; background: #333; }
+  nav button { flex: 1; padding: 10px; color: white; background: #333; border: none; cursor: pointer; }
+  nav button.active { background: #444; }
+  section { padding: 15px; }
+  input, select, button { padding: 8px; margin: 5px 0; }
+  .card { background: white; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Gym Tracker</h1>
+</header>
+<nav>
+  <button onclick="showTab('workout')" id="tab-workout" class="active">Workout</button>
+  <button onclick="showTab('food')" id="tab-food">Food</button>
+  <button onclick="showTab('energy')" id="tab-energy">Energy</button>
+  <button onclick="showTab('measurements')" id="tab-measurements">Measurements</button>
+</nav>
+
+<section id="workout">
+  <h2>Log Workout</h2>
+  <select id="exerciseSelect"></select>
+  <input type="number" id="weightInput" placeholder="Weight (kg)" />
+  <input type="number" id="repsInput" placeholder="Reps" />
+  <button onclick="addWorkout()">Add Set</button>
+  <div id="workoutLog"></div>
+</section>
+
+<section id="food" style="display:none">
+  <h2>Log Food</h2>
+  <input type="text" id="foodName" placeholder="Food name" />
+  <input type="number" id="protein" placeholder="Protein (g)" />
+  <input type="number" id="carbs" placeholder="Carbs (g)" />
+  <input type="number" id="fat" placeholder="Fat (g)" />
+  <button onclick="addFood()">Add Food</button>
+  <div id="foodLog"></div>
+</section>
+
+<section id="energy" style="display:none">
+  <h2>Log Energy Expenditure</h2>
+  <input type="text" id="activity" placeholder="Activity" />
+  <input type="number" id="caloriesBurned" placeholder="Calories burned" />
+  <button onclick="addEnergy()">Add Activity</button>
+  <div id="energyLog"></div>
+</section>
+
+<section id="measurements" style="display:none">
+  <h2>Log Measurements</h2>
+  <input type="text" id="measurementType" placeholder="Measurement type" />
+  <input type="number" id="measurementValue" placeholder="Value (cm)" />
+  <button onclick="addMeasurement()">Add Measurement</button>
+  <div id="measurementLog"></div>
+</section>
+
+<script>
+const exercises = [
+  "Barbell Bench Press","Incline Dumbbell Press","Dumbbell Chest Press","Lat Pulldown",
+  "Pull-up","Seated Cable Row","Back Squat","Front Squat","Leg Press",
+  "Overhead Press","Dumbbell Shoulder Press","Barbell Curl","Triceps Pushdown",
+  "Plank","Hanging Leg Raise"
+];
+
+const workoutLog = JSON.parse(localStorage.getItem('workoutLog')||'[]');
+const foodLog = JSON.parse(localStorage.getItem('foodLog')||'[]');
+const energyLog = JSON.parse(localStorage.getItem('energyLog')||'[]');
+const measurementLog = JSON.parse(localStorage.getItem('measurementLog')||'[]');
+
+function saveData() {
+  localStorage.setItem('workoutLog', JSON.stringify(workoutLog));
+  localStorage.setItem('foodLog', JSON.stringify(foodLog));
+  localStorage.setItem('energyLog', JSON.stringify(energyLog));
+  localStorage.setItem('measurementLog', JSON.stringify(measurementLog));
+}
+
+function showTab(tab) {
+  document.querySelectorAll('section').forEach(s=>s.style.display='none');
+  document.getElementById(tab).style.display='block';
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+}
+
+function populateExercises() {
+  const select = document.getElementById('exerciseSelect');
+  select.innerHTML = exercises.map(e=>`<option>${e}</option>`).join('');
+}
+function addWorkout() {
+  const exercise = document.getElementById('exerciseSelect').value;
+  const weight = document.getElementById('weightInput').value;
+  const reps = document.getElementById('repsInput').value;
+  workoutLog.push({exercise,weight,reps,date:new Date().toLocaleString()});
+  saveData();
+  renderWorkouts();
+}
+function renderWorkouts() {
+  document.getElementById('workoutLog').innerHTML =
+    workoutLog.map(w=>`<div class='card'>${w.date}: ${w.exercise} - ${w.weight}kg × ${w.reps} reps</div>`).join('');
+}
+
+function addFood() {
+  const name = document.getElementById('foodName').value;
+  const protein = +document.getElementById('protein').value;
+  const carbs = +document.getElementById('carbs').value;
+  const fat = +document.getElementById('fat').value;
+  foodLog.push({name,protein,carbs,fat,date:new Date().toLocaleString()});
+  saveData();
+  renderFood();
+}
+function renderFood() {
+  document.getElementById('foodLog').innerHTML =
+    foodLog.map(f=>`<div class='card'>${f.date}: ${f.name} - P:${f.protein}g C:${f.carbs}g F:${f.fat}g</div>`).join('');
+}
+
+function addEnergy() {
+  const activity = document.getElementById('activity').value;
+  const calories = document.getElementById('caloriesBurned').value;
+  energyLog.push({activity,calories,date:new Date().toLocaleString()});
+  saveData();
+  renderEnergy();
+}
+function renderEnergy() {
+  document.getElementById('energyLog').innerHTML =
+    energyLog.map(e=>`<div class='card'>${e.date}: ${e.activity} - ${e.calories} kcal</div>`).join('');
+}
+
+function addMeasurement() {
+  const type = document.getElementById('measurementType').value;
+  const value = document.getElementById('measurementValue').value;
+  measurementLog.push({type,value,date:new Date().toLocaleString()});
+  saveData();
+  renderMeasurements();
+}
+function renderMeasurements() {
+  document.getElementById('measurementLog').innerHTML =
+    measurementLog.map(m=>`<div class='card'>${m.date}: ${m.type} - ${m.value} cm</div>`).join('');
+}
+
+populateExercises();
+renderWorkouts();
+renderFood();
+renderEnergy();
+renderMeasurements();
+</script>
+</body>
+</html>
